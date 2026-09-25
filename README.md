@@ -6,6 +6,12 @@ Deep learning project for pneumonia classification from chest X-Ray images.
 
 - Dataset analysis & preprocessing
 - Transfer Learning with ResNet50
-- Fine-Tuning experiments
+  - Learning Rate comparison
+  - Validation evaluation
+  - Error analysis
+- Transfer Learning with DenseNet121
+  - Learning Rate comparison
+  - Fine-Tuning experiments
+- Experiment tracking & result analysis
 
 > 🚧 Currently in progress.
