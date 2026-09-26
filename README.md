@@ -47,11 +47,11 @@
 
 ```text
 chest-xray-pneumonia/
-│
 ├── cxp/                 # Project modules
-├── notebooks/           # Experiments & analysis
-├── experiments/         # Run configurations & model artifacts
-└── reports/             # Experiment metadata & results
+├── analysis/            # Analysis & evaluation
+├── 01_cxp_eda_processing.ipynb
+├── 02_cxp_experiments.ipynb
+└── README.md
 ```
 
 ---
