@@ -1,7 +1,7 @@
 # ============================================================
 # cxp_plot.py
 # ============================================================
-
+import math
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -75,12 +75,17 @@ def plot_experiment_history(
     history,
     experiment_name,
     metric="loss",
+    y_range=None,
 ):
     """
     Plot training history for all runs in an experiment.
 
-    For experiments with a 20-epoch extension, runs are
-    displayed according to their epoch length.
+    Existing LR analysis function.
+    Kept based on run-level filtering.
+
+    y_range:
+        Optional Y-axis range, e.g. (0.8, 1.0).
+        None keeps automatic range.
     """
 
     runs = (
@@ -109,7 +114,7 @@ def plot_experiment_history(
     # Create subplot
     # --------------------------------------------------------
 
-    if long_runs:
+    if short_runs and long_runs:
 
         fig = make_subplots(
             rows=1,
@@ -146,7 +151,7 @@ def plot_experiment_history(
             cols=1,
         )
 
-        for run in short_runs:
+        for run in runs:
             _add_history(
                 fig=fig,
                 history=history,
@@ -169,6 +174,15 @@ def plot_experiment_history(
         title_text=ylabel
     )
 
+    # --------------------------------------------------------
+    # Optional Y-axis range
+    # --------------------------------------------------------
+
+    if y_range is not None:
+        fig.update_yaxes(
+            range=y_range
+        )
+
     fig.update_layout(
         title=f"{experiment_name} — {ylabel}",
         width=1100,
@@ -187,6 +201,121 @@ def plot_experiment_history(
 
 
 # ============================================================
+# Fine-Tuning Training History
+# ============================================================
+
+def plot_finetuning_history(
+    history,
+    experiment_runs,
+    metric="loss",
+    y_range=None,
+):
+    """
+    Compare training history across selected fine-tuning runs.
+
+    experiment_runs:
+        [
+            ("TL-RESNET50-FULL", "LR2-EPOCH20"),
+            ("TL-RESNET50-PARTIAL", "LR2-EPOCH20"),
+        ]
+
+    Fine-Tuning analysis uses both experiment and run
+    because the same run name can exist in multiple experiments.
+
+    y_range:
+        Optional Y-axis range, e.g. (0.8, 1.0).
+        None keeps automatic range.
+    """
+
+    fig = go.Figure()
+
+    for experiment, run in experiment_runs:
+
+        h = history[
+            (history["experiment"] == experiment)
+            & (history["run"] == run)
+        ].copy()
+
+        if h.empty:
+            continue
+
+        label = experiment.replace(
+            "TL-RESNET50-",
+            "",
+        )
+
+        # ----------------------------------------------------
+        # Train
+        # ----------------------------------------------------
+
+        fig.add_trace(
+            go.Scatter(
+                x=h["epoch"],
+                y=h[f"train_{metric}"],
+                mode="lines",
+                name=f"{label} Train",
+                legendgroup=label,
+                line=dict(
+                    dash="dot",
+                    width=2,
+                ),
+            )
+        )
+
+        # ----------------------------------------------------
+        # Validation
+        # ----------------------------------------------------
+
+        fig.add_trace(
+            go.Scatter(
+                x=h["epoch"],
+                y=h[f"validation_{metric}"],
+                mode="lines",
+                name=f"{label} Validation",
+                legendgroup=label,
+                line=dict(
+                    width=3,
+                ),
+            )
+        )
+
+    ylabel = (
+        "Loss"
+        if metric == "loss"
+        else "Accuracy"
+    )
+
+    # --------------------------------------------------------
+    # Optional Y-axis range
+    # --------------------------------------------------------
+
+    if y_range is not None:
+        fig.update_yaxes(
+            range=y_range
+        )
+
+    model_name = experiment_runs[0][0].replace("TL-", "").split("-")[0]
+    
+    fig.update_layout(
+        title=f"{model_name} Fine-Tuning — {ylabel}",
+        xaxis_title="Epoch",
+        yaxis_title=ylabel,
+        width=1100,
+        height=500,
+        hovermode="x unified",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+        ),
+    )
+
+    fig.show()
+
+
+# ============================================================
 # Validation Metric Comparison
 # ============================================================
 
@@ -194,9 +323,18 @@ def plot_metric_comparison(
     results,
     metrics=None,
     title="Validation Metric Comparison",
+    score_range=(0, 1),
 ):
     """
-    Compare validation metrics across experiment runs.
+    Compare validation metrics across experiment runs
+    using a heatmap.
+
+    Experiment + Run are displayed together because
+    the same run name may exist in multiple experiments.
+
+    score_range:
+        Heatmap score range.
+        Default: (0, 1)
     """
 
     if metrics is None:
@@ -215,60 +353,18 @@ def plot_metric_comparison(
         if metric in results.columns
     ]
 
-    fig = go.Figure()
-
-    for metric in available_metrics:
-
-        fig.add_trace(
-            go.Bar(
-                x=results["run"],
-                y=results[metric],
-                name=metric.replace("_", " ").title(),
-            )
-        )
-
-    fig.update_layout(
-        title=title,
-        xaxis_title="Run",
-        yaxis_title="Score",
-        barmode="group",
-        yaxis=dict(
-            range=[0, 1],
-        ),
-        width=1100,
-        height=550,
-        hovermode="x unified",
-    )
-
-    fig.show()
-
-# ============================================================
-# Validation Metric Comparison
-# ============================================================
-
-def plot_metric_comparison(results, metrics=None, title="Validation Metric Comparison"):
-    """
-    Compare validation metrics across experiment runs using a heatmap.
-    """
-
-    if metrics is None:
-        metrics = [
-            "accuracy",
-            "precision",
-            "recall",
-            "specificity",
-            "f1",
-            "roc_auc",
-        ]
-
-    available_metrics = [
-        metric for metric in metrics
-        if metric in results.columns
-    ]
-
     metric_labels = [
         metric.replace("_", " ").title()
         for metric in available_metrics
+    ]
+
+    # --------------------------------------------------------
+    # Experiment + Run label
+    # --------------------------------------------------------
+
+    x_labels = [
+        f"{row['experiment']}\n{row['run']}"
+        for _, row in results.iterrows()
     ]
 
     z = results[available_metrics].T.values
@@ -276,28 +372,34 @@ def plot_metric_comparison(results, metrics=None, title="Validation Metric Compa
     fig = go.Figure(
         go.Heatmap(
             z=z,
-            x=results["run"],
+            x=x_labels,
             y=metric_labels,
             text=z,
             texttemplate="%{text:.3f}",
             colorscale="Blues",
-            zmin=0,
-            zmax=1,
+            zmin=score_range[0],
+            zmax=score_range[1],
             showscale=True,
-            colorbar=dict(title="Score"),
+            colorbar=dict(
+                title="Score",
+            ),
         )
     )
 
     fig.update_layout(
         title=title,
-        xaxis_title="Run",
+        xaxis_title="Experiment / Run",
         yaxis_title="Metric",
         width=1100,
-        height=max(400, 70 * len(available_metrics)),
+        height=max(
+            400,
+            70 * len(available_metrics),
+        ),
     )
 
     fig.show()
-    
+
+
 # ============================================================
 # ROC Curve
 # ============================================================
@@ -306,9 +408,19 @@ def plot_roc_curve(
     y_true,
     y_prob,
     title="ROC Curve",
+    x_range=(0, 1),
+    y_range=(0, 1),
 ):
     """
     Plot ROC curve for one model/run.
+
+    x_range:
+        False Positive Rate range.
+        Default: (0, 1)
+
+    y_range:
+        True Positive Rate range.
+        Default: (0, 1)
     """
 
     fpr, tpr, _ = roc_curve(
@@ -339,7 +451,7 @@ def plot_roc_curve(
             mode="lines",
             name="Random",
             line=dict(
-                dash="dash"
+                dash="dash",
             ),
         )
     )
@@ -348,6 +460,12 @@ def plot_roc_curve(
         title=title,
         xaxis_title="False Positive Rate",
         yaxis_title="True Positive Rate",
+        xaxis=dict(
+            range=x_range,
+        ),
+        yaxis=dict(
+            range=y_range,
+        ),
         width=800,
         height=600,
     )
@@ -363,9 +481,19 @@ def plot_pr_curve(
     y_true,
     y_prob,
     title="Precision-Recall Curve",
+    x_range=(0, 1),
+    y_range=(0, 1),
 ):
     """
     Plot Precision-Recall curve for one model/run.
+
+    x_range:
+        Recall range.
+        Default: (0, 1)
+
+    y_range:
+        Precision range.
+        Default: (0, 1)
     """
 
     precision, recall, _ = (
@@ -395,6 +523,12 @@ def plot_pr_curve(
         title=title,
         xaxis_title="Recall",
         yaxis_title="Precision",
+        xaxis=dict(
+            range=x_range,
+        ),
+        yaxis=dict(
+            range=y_range,
+        ),
         width=800,
         height=600,
     )
@@ -418,17 +552,35 @@ def show_error_images(
     """
 
     sample_df = dataframe.head(n)
+    n_images = len(sample_df)
+
+    if n_images == 0:
+        print("No error images found.")
+        return
+
+    # --------------------------------------------------------
+    # Dynamic Grid
+    # --------------------------------------------------------
+
+    n_cols = min(4, n_images)
+    n_rows = math.ceil(n_images / n_cols)
 
     fig, axes = plt.subplots(
-        2,
-        4,
-        figsize=(16, 8),
+        n_rows,
+        n_cols,
+        figsize=(4 * n_cols, 4 * n_rows),
+        squeeze=False,
     )
 
     axes = axes.flatten()
 
-    for ax in axes:
+    # Hide unused axes
+    for ax in axes[n_images:]:
         ax.axis("off")
+
+    # --------------------------------------------------------
+    # Display Images
+    # --------------------------------------------------------
 
     for ax, (_, row) in zip(
         axes,
@@ -478,10 +630,15 @@ def plot_confusion_matrix_comparison(
     Compare confusion matrix counts across experiment runs.
     """
 
+    x_labels = [
+        f"{row['experiment']}\n{row['run']}"
+        for _, row in results.iterrows()
+    ]
+
     fig = make_subplots(
         rows=1,
         cols=len(results),
-        subplot_titles=results["run"].tolist(),
+        subplot_titles=x_labels,
     )
 
     for col, (_, row) in enumerate(
@@ -509,7 +666,10 @@ def plot_confusion_matrix_comparison(
 
     fig.update_layout(
         title=title,
-        width=max(900, 300 * len(results)),
+        width=max(
+            900,
+            350 * len(results),
+        ),
         height=400,
     )
 
@@ -523,6 +683,7 @@ def plot_confusion_matrix_comparison(
 
     fig.show()
 
+
 # ============================================================
 # ROC Curve Comparison
 # ============================================================
@@ -530,14 +691,40 @@ def plot_confusion_matrix_comparison(
 def plot_roc_curve_comparison(
     prediction_results,
     title="Validation ROC Curve Comparison",
+    x_range=(0, 1),
+    y_range=(0, 1),
 ):
     """
     Compare ROC curves across experiment runs.
+
+    prediction_results:
+        {
+            (experiment, run): {
+                "labels": ...,
+                "predictions": ...,
+                "probabilities": ...,
+            }
+        }
+
+    x_range:
+        False Positive Rate range.
+        Default: (0, 1)
+
+    y_range:
+        True Positive Rate range.
+        Default: (0, 1)
     """
 
     fig = go.Figure()
 
-    for run, result in prediction_results.items():
+    for key, result in prediction_results.items():
+
+        if isinstance(key, tuple):
+            experiment, run = key
+            label = f"{experiment}\n{run}"
+        else:
+            # Backward compatibility for run-only dictionaries
+            label = str(key)
 
         y_true = result["labels"]
         y_prob = result["probabilities"]
@@ -557,9 +744,13 @@ def plot_roc_curve_comparison(
                 x=fpr,
                 y=tpr,
                 mode="lines",
-                name=f"{run} (AUC={roc_auc:.4f})",
+                name=f"{label} (AUC={roc_auc:.4f})",
             )
         )
+
+    # --------------------------------------------------------
+    # Random Classifier
+    # --------------------------------------------------------
 
     fig.add_trace(
         go.Scatter(
@@ -577,11 +768,18 @@ def plot_roc_curve_comparison(
         title=title,
         xaxis_title="False Positive Rate",
         yaxis_title="True Positive Rate",
+        xaxis=dict(
+            range=x_range,
+        ),
+        yaxis=dict(
+            range=y_range,
+        ),
         width=850,
         height=600,
     )
 
     fig.show()
+
 
 # ============================================================
 # Precision-Recall Curve Comparison
@@ -590,14 +788,40 @@ def plot_roc_curve_comparison(
 def plot_pr_curve_comparison(
     prediction_results,
     title="Validation Precision-Recall Curve Comparison",
+    x_range=(0, 1),
+    y_range=(0, 1),
 ):
     """
     Compare Precision-Recall curves across experiment runs.
+
+    prediction_results:
+        {
+            (experiment, run): {
+                "labels": ...,
+                "predictions": ...,
+                "probabilities": ...,
+            }
+        }
+
+    x_range:
+        Recall range.
+        Default: (0, 1)
+
+    y_range:
+        Precision range.
+        Default: (0, 1)
     """
 
     fig = go.Figure()
 
-    for run, result in prediction_results.items():
+    for key, result in prediction_results.items():
+
+        if isinstance(key, tuple):
+            experiment, run = key
+            label = f"{experiment}\n{run}"
+        else:
+            # Backward compatibility for run-only dictionaries
+            label = str(key)
 
         y_true = result["labels"]
         y_prob = result["probabilities"]
@@ -619,7 +843,7 @@ def plot_pr_curve_comparison(
                 x=recall,
                 y=precision,
                 mode="lines",
-                name=f"{run} (PR-AUC={pr_auc:.4f})",
+                name=f"{label} (PR-AUC={pr_auc:.4f})",
             )
         )
 
@@ -627,6 +851,12 @@ def plot_pr_curve_comparison(
         title=title,
         xaxis_title="Recall",
         yaxis_title="Precision",
+        xaxis=dict(
+            range=x_range,
+        ),
+        yaxis=dict(
+            range=y_range,
+        ),
         width=850,
         height=600,
     )

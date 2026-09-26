@@ -204,3 +204,80 @@ def evaluate_model(
     )
 
     return metrics
+ 
+
+import json
+from pathlib import Path
+
+
+def save_validation_result(
+    run_path,
+    experiment,
+    run,
+    labels,
+    predictions,
+    probabilities,
+    metrics,
+):
+    validation_path = Path(run_path) / "validation.json"
+
+    result = {
+        "experiment": experiment,
+        "run": run,
+        "dataset": "validation",
+        "num_samples": len(labels),
+        "metrics": metrics,
+        "predictions": {
+            "labels": labels.tolist(),
+            "predictions": predictions.tolist(),
+            "probabilities": probabilities.tolist(),
+        },
+    }
+
+    with open(validation_path, "w", encoding="utf-8") as f:
+        json.dump(
+            result,
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    return validation_path    
+
+def save_test_result(
+    run_path,
+    experiment,
+    run,
+    labels,
+    predictions,
+    probabilities,
+    metrics,
+):
+    test_path = Path(run_path) / "test.json"
+
+    result = {
+        "experiment": experiment,
+        "run": run,
+        "dataset": "test",
+        "num_samples": len(labels),
+        "metrics": metrics,
+        "predictions": {
+            "labels": labels.tolist(),
+            "predictions": predictions.tolist(),
+            "probabilities": probabilities.tolist(),
+        },
+    }
+
+    with open(
+        test_path,
+        "w",
+        encoding="utf-8",
+    ) as f:
+        json.dump(
+            result,
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+    return test_path
